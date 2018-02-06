@@ -3,11 +3,16 @@ package searchclient;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 
-import searchclient.Memory;
-import searchclient.Strategy.*;
-import searchclient.Heuristic.*;
+import searchclient.Heuristic.AStar;
+import searchclient.Heuristic.Greedy;
+import searchclient.Heuristic.WeightedAStar;
+import searchclient.Strategy.StrategyBFS;
+import searchclient.Strategy.StrategyBestFirst;
+import searchclient.Strategy.StrategyDFS;
 
 public class SearchClient {
 	public Node initialState;
@@ -21,36 +26,57 @@ public class SearchClient {
 		}
 
 		int row = 0;
+		int maxRows = 0;
+		int longestLineLength = 0;
 		boolean agentFound = false;
 		this.initialState = new Node(null);
-
-		while (!line.equals("")) {
+		List<String> lines = new ArrayList<>();
+		
+		while(!line.equals("")) {
+			lines.add(line);
 			for (int col = 0; col < line.length(); col++) {
-				char chr = line.charAt(col);
-
-				if (chr == '+') { // Wall.
-					this.initialState.walls[row][col] = true;
-				} else if ('0' <= chr && chr <= '9') { // Agent.
-					if (agentFound) {
-						System.err.println("Error, not a single agent level");
-						System.exit(1);
-					}
-					agentFound = true;
-					this.initialState.agentRow = row;
-					this.initialState.agentCol = col;
-				} else if ('A' <= chr && chr <= 'Z') { // Box.
-					this.initialState.boxes[row][col] = chr;
-				} else if ('a' <= chr && chr <= 'z') { // Goal.
-					this.initialState.goals[row][col] = chr;
-				} else if (chr == ' ') {
-					// Free space.
-				} else {
-					System.err.println("Error, read invalid level character: " + (int) chr);
-					System.exit(1);
+				if(line.length() > longestLineLength) {
+					longestLineLength = line.length();
 				}
 			}
 			line = serverMessages.readLine();
-			row++;
+			maxRows++;
+		}
+		this.initialState.setMaxCol(longestLineLength);
+		this.initialState.setMaxRow(maxRows);
+		this.initialState.setupMap();
+		try {
+			for(String theLine: lines){
+				for (int col = 0; col < theLine.length(); col++) {
+					char chr = theLine.charAt(col);
+//					System.err.println("Row: " + row);
+					if (chr == '+') { // Wall.
+						this.initialState.walls[row][col] = true;
+					} else if ('0' <= chr && chr <= '9') { // Agent.
+						if (agentFound) {
+							System.err.println("Error, not a single agent level");
+							System.exit(1);
+						}
+						agentFound = true;
+						this.initialState.agentRow = row;
+						this.initialState.agentCol = col;
+					} else if ('A' <= chr && chr <= 'Z') { // Box.
+						this.initialState.boxes[row][col] = chr;
+					} else if ('a' <= chr && chr <= 'z') { // Goal.
+						this.initialState.goals[row][col] = chr;
+					} else if (chr == ' ') {
+						// Free space.
+					} else {
+						System.err.println("Error, read invalid level character: " + (int) chr);
+						System.exit(1);
+					}
+				}
+				row++;
+			}
+		}catch(Exception e) {
+			System.err.println("Size: " + this.initialState.walls[0].length);
+			System.err.println("Failed");
+			e.printStackTrace();
 		}
 	}
 
@@ -71,12 +97,12 @@ public class SearchClient {
 
 			Node leafNode = strategy.getAndRemoveLeaf();
 
-			if (leafNode.isGoalState()) {
+			if (leafNode.isGoalState(initialState)) {
 				return leafNode.extractPlan();
 			}
 
 			strategy.addToExplored(leafNode);
-			for (Node n : leafNode.getExpandedNodes()) { // The list of expanded nodes is shuffled randomly; see Node.java.
+			for (Node n : leafNode.getExpandedNodes(initialState)) { // The list of expanded nodes is shuffled randomly; see Node.java.
 				if (!strategy.isExplored(n) && !strategy.inFrontier(n)) {
 					strategy.addToFrontier(n);
 				}
